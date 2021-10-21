@@ -90,12 +90,14 @@ class JV:
         self.Voc=(V0*J1-V1*J0)/(-J0+J1)
         # Find PCE
         self.PCE=0
+        self.FF=0
         for i,j in zip(self.J,self.V):
+            # print(-i*j/self.power*100)
             if -i*j/self.power*100>self.PCE:
                 self.PCE=-i*j/self.power*100
                 # Find FF
                 self.FF=-i*j/self.Voc/self.Jsc*100
-        
+        # print(self.PCE)
     
     def plot(self):
         plt.grid(True,which='both',axis='x')
@@ -111,6 +113,10 @@ class deviceJV:
         assert isinstance(pixels,(list,tuple)),'device must be a tuple or list'
         assert all(isinstance(i,JV) for i in pixels), 'deviceJV only takes list(tuple) of JV objects'
         assert direction in ('forward','reverse','both'), 'direction must be forward, reverse or both'
+        assert all([i.status['direction']==pixels[0].status['direction'] for i in pixels[1:]]), 'same device must have the same direction'
+        if not pixels[0].status['direction']==direction:
+            direction=pixels[0].status['direction']
+            print('Correcting direction for '+device_name+' based on pixel0!')
         self.direction=direction
         self.pix_n=len(pixels) if direction in ('forward','reverse') else len(pixels)/2
         self.pixels,self.name=pixels,device_name
@@ -134,10 +140,9 @@ class deviceJV:
         save_csv_for_origin((x,y),location,filename,datanames,origin_header)
         
     def save_device_summary_csv(self,location):
-        filename=self.name+'_summary'
-        origin_header=[['Pixels','V\\-(oc)','J\\-(sc)','FF','PCE'],[None,'V','mA/cm\\+(2)','','%']]
+        origin_header=[['Pixels']+[self.name]*4,[None,'V','mA/cm\\+(2)','%','%']]
         datanames=[['V\\-(oc)','J\\-(sc)','FF','PCE']]
-        # datanames=['V\\-(oc)']
+        #making the arrays of each element
         x,Voc,Jsc,FF,PCE=[],[],[],[],[]
         for i in self.pixels:
             x.append(i.name)
@@ -145,7 +150,20 @@ class deviceJV:
             Jsc.append(i.Jsc)
             FF.append(i.FF)
             PCE.append(i.PCE)
-        save_csv_for_origin(([x],[Voc],[Jsc],[FF],[PCE]),location,filename,datanames,origin_header)
+        if self.direction=='both':
+            filename=self.name+'_summary_'+self.pixels[0].status['direction']
+            #making each element into 2D arrays
+            data=([x[::2]],[Voc[::2]],[Jsc[::2]],[FF[::2]],[PCE[::2]])
+            save_csv_for_origin(data,location,filename,datanames,origin_header)
+            filename=self.name+'_summary_'+self.pixels[1].status['direction']
+            #making each element into 2D arrays
+            data=([x[1::2]],[Voc[1::2]],[Jsc[1::2]],[FF[1::2]],[PCE[1::2]])
+            save_csv_for_origin(data,location,filename,datanames,origin_header)
+        else:
+            filename=self.name+'_summary'
+            #making each element into 2D arrays
+            data=([x],[Voc],[Jsc],[FF],[PCE])
+            save_csv_for_origin(data,location,filename,datanames,origin_header)
         
     @classmethod
     def import_from_files(cls,filenames,direction='forward',header_length=3,power=100,trunc=-4):
