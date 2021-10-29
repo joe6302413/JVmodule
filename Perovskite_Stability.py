@@ -354,7 +354,7 @@ class MyFrame(wx.Frame):
         value_list = [float(i) for i in raw_data.decode('ascii').strip().split(',')]
         ser_keithley.close()
 
-        return value_list
+        return [value_list]
 
 #----------------------------------------------------------------------------------
     def OnMeasurement_Hyst(self, event):      #Main I-V measurement function reverse voltage
@@ -487,7 +487,7 @@ class MyFrame(wx.Frame):
                 self.Logbox.AppendText('\r' + time_message + '  ' + message)
 
                 if not self.check_Hysteresis.IsChecked():
-                    value_list = [self.OnMeasurement(event)]
+                    value_list = self.OnMeasurement(event)
                 else:
                     value_list=self.OnMeasurement_Hyst(event)
                 wx.Yield()                                  #make the GUI keep refresh????

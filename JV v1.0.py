@@ -21,14 +21,16 @@ filenames=[]
 #%% choose files
 root=tk.Tk()
 root.withdraw()
+root.iconify()
 filenames+=tkinter.filedialog.askopenfilenames(parent=root,initialdir=JVdir, title='Please select JV files',filetypes=[('csv','*.csv')])
+root.destroy()
 
 #%% load files into devices
 plt.close('all')
-devices=deviceJV.import_from_files(filenames,direction='both',header_length=3,power=100,trunc=-4)
+devices=deviceJV.import_from_files(filenames,direction='reverse',header_length=3,power=100,trunc=-4)
 
 #%% Saving APS and APS fit and HOMO with error
 location=split(filenames[0])[0]
 for i in devices:
-    i.save_device_csv(location)
+    # i.save_device_csv(location)
     i.save_device_summary_csv(location)
