@@ -485,7 +485,6 @@ class MyFrame(wx.Frame):
                 message = 'reading device'+ str(device_num) + '-pixel' + str(pixel_num)
                 time_message = time.strftime("%H:%M:%S", time.gmtime(time.time() - self.start_time))
                 self.Logbox.AppendText('\r' + time_message + '  ' + message)
-
                 if not self.check_Hysteresis.IsChecked():
                     value_list = self.OnMeasurement(event)
                 else:
@@ -502,10 +501,9 @@ class MyFrame(wx.Frame):
                         direction='reverse'
                         self.matplotlibhrapg.drawData(vl, device_num, str(pixel_num)+'_reverse', area)
                     pixels.append(jvm.JV(voltage,current,device_summary+'_p'+str(pixel_num)+'_'+direction,direction,P_in))
-                    
                 self.pixel_off_stability(device_num, pixel_num)
                 self.Logbox.AppendText('\r' +pixels[-1].__str__())
-
+            # global devicejv
             devicejv=jvm.deviceJV(pixels,device_summary,'both' if self.check_Hysteresis.IsChecked() else direction,P_in)
             devicejv.save_device_csv('')
             devicejv.save_device_summary_csv('')

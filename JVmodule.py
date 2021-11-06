@@ -47,11 +47,23 @@ def save_csv_for_origin(data,location,filename=None,datanames=None,header=None):
         writer.writerows(data)
         
 class JV:
-    def __init__(self,V,J,name='no_name',direction='forward',power=100):
+    def __init__(self,V,J,name='no_name',power=100,p_area=0.045):
+        '''
+        V and J are list of voltage and current density. Name is a string.
+        power is in unit of mW/cm^2 and size is in unit of cm^2
+        '''
         assert len(J)==len(V), 'number of Current-Voltage data not matching'
-        assert direction in ('forward','reverse'), 'direction has to be either forward or reverse'
+        # assert direction in ('forward','reverse'), 'direction has to be either forward or reverse'
+        if all(np.diff(V)>0):
+            direction='forward'
+        elif all(np.diff(V)<0):
+            direction='reverse'
+        else:
+            raise Exception('JV scan must be one single direction scan!')
         self.J,self.V,self.name,self.power=np.array(J),np.array(V),name,power
-        self.status={'direction': direction,'power': str(power)+'mW/cm^2'}
+        self.p_area=p_area
+        self.status={'direction': direction,'power': str(power)+' mW/cm^2',
+                     'pixel area': str(p_area)+' cm^2'}
         self.find_characters()
         self.status.update({'Jsc':self.Jsc,
                      'Voc': self.Voc,'FF':self.FF, 'PCE': self.PCE})
@@ -64,30 +76,40 @@ class JV:
         summary='Name:\t'+self.name+'\n'
         summary+='\n'.join([i+':\t'+str(j) for i,j in self.status.items()])+'\n'
         return summary
-    
+        
     def find_characters(self):
         # Find Jsc and Shunt resistance
         if self.status['direction']=='forward':
-            index=next(p for p,q in enumerate(self.V) if q>0)
-            J0,J1,V0,V1=self.J[index-1],self.J[index],self.V[index-1],self.V[index]
-            # minindex=next(p for p,q in enumerate(self.V) if q>1e-2)
-            # maxindex=next(p for p,q in enumerate(self.V) if q>-1e-2)
+            try:
+                index=next(p for p,q in enumerate(self.V) if q>0)
+                J0,J1,V0,V1=self.J[index-1],self.J[index],self.V[index-1],self.V[index]
+                self.Jsc=-(-V0*J1+V1*J0)/(-V0+V1)
+            except:
+                self.Jsc=np.nan
         else:
-            index=next(p for p,q in enumerate(self.V) if q<0)
-            J0,J1,V0,V1=self.J[index],self.J[index-1],self.V[index],self.V[index-1]
-            # minindex=next(p for p,q in enumerate(self.V) if q<1e-2)
-            # maxindex=next(p for p,q in enumerate(self.V) if q<-1e-2)
-        self.Jsc=-(-V0*J1+V1*J0)/(-V0+V1)
+            try:
+                index=next(p for p,q in enumerate(self.V) if q<0)
+                J0,J1,V0,V1=self.J[index],self.J[index-1],self.V[index],self.V[index-1]
+                self.Jsc=-(-V0*J1+V1*J0)/(-V0+V1)
+            except:
+                self.Jsc=np.nan
         # [self.Rsh,_],[[cov,_],[_,_]]=np.polyfit(1e-3*self.J[minindex:maxindex],self.V[minindex:maxindex],1,cov=True)
         # self.std_Rsh=cov**0.5
         # Find Voc
         if self.status['direction']=='forward':
-            index=next(p for p,q in enumerate(self.J) if q>0)
-            J0,J1,V0,V1=self.J[index-1],self.J[index],self.V[index-1],self.V[index]
+            try:
+                index=next(p for p,q in enumerate(self.J) if q>0)
+                J0,J1,V0,V1=self.J[index-1],self.J[index],self.V[index-1],self.V[index]
+                self.Voc=(V0*J1-V1*J0)/(-J0+J1)
+            except:
+                self.Voc=np.nan
         else:
-            index=next(p for p,q in enumerate(self.J) if q<0)
-            J0,J1,V0,V1=self.J[index],self.J[index-1],self.V[index],self.V[index-1]
-        self.Voc=(V0*J1-V1*J0)/(-J0+J1)
+            try:
+                index=next(p for p,q in enumerate(self.J) if q<0)
+                J0,J1,V0,V1=self.J[index],self.J[index-1],self.V[index],self.V[index-1]
+                self.Voc=(V0*J1-V1*J0)/(-J0+J1)
+            except:
+                self.Voc=np.nan
         # Find PCE
         self.PCE=0
         self.FF=0
@@ -109,23 +131,32 @@ class JV:
         
 
 class deviceJV:
-    def __init__(self,pixels,device_name='device',direction='forward',power=100):
+    def __init__(self,pixels,device_name='device',direction='forward',power=100,p_area=0.045):
         assert isinstance(pixels,(list,tuple)),'device must be a tuple or list'
         assert all(isinstance(i,JV) for i in pixels), 'deviceJV only takes list(tuple) of JV objects'
         assert direction in ('forward','reverse','both'), 'direction must be forward, reverse or both'
-        assert all([i.status['direction']==pixels[0].status['direction'] for i in pixels[1:]]), 'same device must have the same direction'
-        if not pixels[0].status['direction']==direction:
-            direction=pixels[0].status['direction']
-            print('Correcting direction for '+device_name+' based on pixel0!')
+        if direction!='both':
+            assert all([i.status['direction']==pixels[0].status['direction'] for i in pixels[1:]]), 'same device must have the same direction'
+            if not pixels[0].status['direction']==direction:
+                direction=pixels[0].status['direction']
+                print('Correcting direction for '+device_name+'!')
+        else:
+            assert all([i.status['direction']==pixels[0].status['direction'] for i in pixels[2::2]]), 'even pixels are not having the same direction'
+            assert all([i.status['direction']==pixels[1].status['direction'] for i in pixels[3::2]]), 'odd pixels are not having the same direction'
+            assert pixels[0].status['direction']!=pixels[1].status['direction'], 'This device is not scanned in both directions'
         self.direction=direction
         self.pix_n=len(pixels) if direction in ('forward','reverse') else len(pixels)/2
         self.pixels,self.name=pixels,device_name
+        self.status={'direction': direction,'number of pixels': self.pix_n,
+                     'power': str(power)+' mW/cm^2',
+                     'pixel area': str(p_area)+' cm^2'}
     def __repr__(self):
         return self.name
     
     def __str__(self):
-        summary='Name:\t'+self.name+'\nContains:\n'
-        summary+='\n'.join([i.name for i in self.pixels])+'\n'
+        summary='Name:\t'+self.name+'\n'
+        summary+='\n'.join([i+':\t'+str(j) for i,j in self.status.items()])+'\n'
+        summary+='Contains:\n'+'\n'.join([i.name for i in self.pixels])+'\n'
         return summary
     
     def plot(self):
