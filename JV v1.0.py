@@ -27,7 +27,7 @@ root.destroy()
 
 #%% load files into devices
 plt.close('all')
-devices=deviceJV.import_from_files(filenames,direction='both',header_length=3,power=100,trunc=-4)
+devices=deviceJV.import_from_files(filenames,direction='reverse',header_length=3,power=100,trunc=-4)
 
 #%% Saving APS and APS fit and HOMO with error
 location=split(filenames[0])[0]

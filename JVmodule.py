@@ -197,12 +197,13 @@ class deviceJV:
             save_csv_for_origin(data,location,filename,datanames,origin_header)
         
     @classmethod
-    def import_from_files(cls,filenames,direction='forward',header_length=3,power=100,trunc=-4):
+    def import_from_files(cls,filenames,direction='forward',header_length=3,power=100,p_area=0.045,trunc=-4):
         devices=[]
         for i in filenames:
             filename=split(i)[1][:trunc]
             with open(i,'r',newline='') as f:
                 reader=csv.reader(list(f)[header_length:],quoting=csv.QUOTE_NONNUMERIC)
+                # reader=csv.reader(list(f)[header_length:],quoting=csv.QUOTE_NONNUMERIC)
                 data=np.array(list(reader))
                 pixels=[]
                 for n in range(np.size(data,1)//2):
@@ -215,17 +216,17 @@ class deviceJV:
                             J0,J1=data[:index+1,2*n+1],data[index+1:,2*n+1]
                             name0=filename+'_p'+str(n)+'_'+direction0
                             name1=filename+'_p'+str(n)+'_'+direction1
-                            pixels.append(JV(V0,J0,name0,direction0,power))
-                            pixels.append(JV(V1,J1,name1,direction1,power))
+                            pixels.append(JV(V0,J0,name0,power,p_area))
+                            pixels.append(JV(V1,J1,name1,power,p_area))
                         else:
                             V,J=data[:,2*n],data[:,2*n+1]
                             pix_direction='forward' if V[1]-V[0]>0 else 'reverse'
                             name=filename+'_p'+str(n//2)+'_'+pix_direction
-                            pixels.append(JV(V,J,name,pix_direction,power))
+                            pixels.append(JV(V,J,name,power,p_area))
                     else:
                         V,J=data[:,2*n],data[:,2*n+1]
                         name=filename+'_p'+str(n)+'_'+direction
-                        pixels.append(JV(V,J,name,direction,power))
+                        pixels.append(JV(V,J,name,power,p_area))
                 devices.append(deviceJV(pixels,filename,direction,power))
         return devices
 
