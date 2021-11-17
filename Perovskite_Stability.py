@@ -84,25 +84,25 @@ class MyFrame(wx.Frame):
         ParamBox.Add(self.tc8, pos=(2,1), span=(1,2), flag=wx.LEFT, border=2)
         
         st2 = wx.StaticText(rightPanel, label='Start')
-        self.tc2 = wx.TextCtrl(rightPanel, -1, value='-1.0', size=(55,20))
+        self.tc2 = wx.TextCtrl(rightPanel, -1, value='1.6', size=(55,20))
         ParamBox.Add(st2, pos=(3,0), flag=wx.LEFT, border=15)
         ParamBox.Add(self.tc2, pos=(3,1), flag=wx.LEFT, border=2)
         ParamBox.Add(wx.StaticText(rightPanel, label='V'), pos=(3,2), flag=wx.LEFT, border=1)
         
         st3 = wx.StaticText(rightPanel, label='End')
-        self.tc3 = wx.TextCtrl(rightPanel, -1, value='1.6', size=(55,20))      
+        self.tc3 = wx.TextCtrl(rightPanel, -1, value='-1.0', size=(55,20))      
         ParamBox.Add(st3, pos=(4,0), flag=wx.LEFT, border=15)
         ParamBox.Add(self.tc3, pos=(4,1), flag=wx.LEFT, border=2)
         ParamBox.Add(wx.StaticText(rightPanel, label='V'), pos=(4,2), flag=wx.LEFT, border=1)
         
         st4 = wx.StaticText(rightPanel, label='Step')
-        self.tc4 = wx.TextCtrl(rightPanel, -1, value='0.005', size=(55,20))      
+        self.tc4 = wx.TextCtrl(rightPanel, -1, value='-0.005', size=(55,20))      
         ParamBox.Add(st4, pos=(5,0), flag=wx.LEFT, border=15)
         ParamBox.Add(self.tc4, pos=(5,1), flag=wx.LEFT, border=2)
         ParamBox.Add(wx.StaticText(rightPanel, label='V'), pos=(5,2), flag=wx.LEFT, border=1)
         
         st5 = wx.StaticText(rightPanel, label='Delay')
-        self.tc5 = wx.TextCtrl(rightPanel, -1, value='10', size=(55,20))      
+        self.tc5 = wx.TextCtrl(rightPanel, -1, value='0', size=(55,20))      
         ParamBox.Add(st5, pos=(6,0), flag=wx.LEFT, border=15)
         ParamBox.Add(self.tc5, pos=(6,1), flag=wx.LEFT, border=2)
         ParamBox.Add(wx.StaticText(rightPanel, label='ms'), pos=(6,2), flag=wx.LEFT, border=1)
@@ -271,7 +271,7 @@ class MyFrame(wx.Frame):
         
         area = float(self.tc6.GetValue())   #get area value from the area text control box
         
-        ser_keithley = serial.Serial(port="COM7", baudrate=19200, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
+        ser_keithley = serial.Serial(port="COM7", baudrate=38400, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
 
         #Initialisation of Keithley
         ser_keithley.write(b'*RST\r')                    #Reset Keithley
@@ -282,6 +282,7 @@ class MyFrame(wx.Frame):
         ser_keithley.write(b':FORM:ELEM CURR\r')         #Retrieve Current only 
         ser_keithley.write(b':SENS:VOLT:PROT 5\r')       #Cmpl voltage in Volt
         ser_keithley.write(b':SENS:CURR:PROT 0.5\r')     #Cmpl current in Ampere
+        ser_keithley.write(b':SENS:CURR:NPLC 0.1\r')     #AC noise integration time. Longer time will suppress noise level
         ser_keithley.write(b':OUTP ON\r')
         ser_keithley.write(b':READ?\r')
         
@@ -315,124 +316,143 @@ class MyFrame(wx.Frame):
             self.timebox.SetValue("%d Days  %02d:%02d:%02d" % (d,h,m,s))
 
 #----------------------------------------------------------------------------------
-    def OnMeasurement(self, event):             #Main I-V measurement function
+    def OnMeasurement(self, event,hys=False):             #Main I-V measurement function
         
         start_voltage = float(self.tc2.GetValue())
         stop_voltage = float(self.tc3.GetValue())
         voltage_step = float(self.tc4.GetValue())
         delay_time = float(self.tc5.GetValue())/1000
-                
+        # import time, serial
+        # start=time.time()
+
+        # start_voltage = -1.0
+        # stop_voltage = 1.2
+        # voltage_step = 0.005
+        # delay_time=0
+        
         trigger_count = int(1 + (stop_voltage - start_voltage) / voltage_step)
         num_of_read = 28 * trigger_count
 
-        ser_keithley = serial.Serial(port="COM7", baudrate=19200, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
+        ser_keithley = serial.Serial(port="COM7", baudrate=38400, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
 
         #Initialisation of Keithley
         ser_keithley.write(b'*RST\r')                    #Reset Keithley
+        # ser_keithley.write(b'*CLS\r')                    #clear Keithley
         ser_keithley.write(b':SOUR:FUNC VOLT\r')         #Set Voltage as SOURCE
         ser_keithley.write(b':SENS:FUNC "CURRENT"\r')    #Set Current as SENSOR
         ser_keithley.write(b':FORM:ELEM VOLT, CURR\r')   #Retrieve Voltage and Current 
         ser_keithley.write(b':SENS:VOLT:PROT 5\r')       #Cmpl voltage in Volt
         ser_keithley.write(b':SENS:CURR:PROT 0.5\r')     #Cmpl current in Ampere
-
+        ser_keithley.write(b':SENS:CURR:NPLC 0.1\r')     #AC noise integration time. Longer time will suppress noise level
+        
         ser_keithley.write(b':SOUR:VOLT:START %f\r' %start_voltage)
         ser_keithley.write(b':SOUR:VOLT:STOP %f\r' %stop_voltage)
         ser_keithley.write(b':SOUR:VOLT:STEP %f\r' %voltage_step)
         ser_keithley.write(b':SOUR:VOLT:MODE SWE\r')
-        ser_keithley.write(b':SOUR:SWE:RANG AUTO\r')
-        ser_keithley.write(b':SOUR:SWE:SPAC LIN\r')
+        ser_keithley.write(b':SOUR:DEL:AUTO OFF\r')
+        # ser_keithley.write(b':SOUR:SWE:RANG AUTO\r') #default is BEST
+        # ser_keithley.write(b':SOUR:SWE:SPAC LIN\r') #default is LIN
         ser_keithley.write(b':TRIG:COUN %f\r' %trigger_count)
         ser_keithley.write(b':SOUR:DEL %f\r' %delay_time)
+        
         ser_keithley.write(b':OUTP ON\r')
         ser_keithley.write(b':READ?\r')
         
         raw_data = ser_keithley.read(num_of_read)
-        
-        ser_keithley.write(b':OUTP OFF\r')
-
         #Convert read values to float number and separate to voltage and current
-        value_list = [float(i) for i in raw_data.decode('ascii').strip().split(',')]
+        value_lists = [[float(i) for i in raw_data.decode('ascii').strip().split(',')]]
+        if hys:
+            ser_keithley.write(b':SOUR:SWE:DIR DOWN\r')
+            ser_keithley.write(b':READ?\r')
+            raw_data=ser_keithley.read(num_of_read)
+            value_lists+=[[float(i) for i in raw_data.decode('ascii').strip().split(',')]]
+        ser_keithley.write(b':OUTP OFF\r')
         ser_keithley.close()
-
-        return [value_list]
+        
+        # stop=time.time()
+        # print(str(stop-start))
+        
+        return value_lists
 
 #----------------------------------------------------------------------------------
-    def OnMeasurement_Hyst(self, event):      #Main I-V measurement function reverse voltage
-        start_voltage = float(self.tc2.GetValue())
-        stop_voltage = float(self.tc3.GetValue())
-        voltage_step = float(self.tc4.GetValue())
-        delay_time = float(self.tc5.GetValue())/1000
+    # def OnMeasurement_Hyst(self, event):      #Main I-V measurement function reverse voltage
+    #     start_voltage = float(self.tc2.GetValue())
+    #     stop_voltage = float(self.tc3.GetValue())
+    #     voltage_step = float(self.tc4.GetValue())
+    #     delay_time = float(self.tc5.GetValue())/1000
                 
-        trigger_count = int(1 + (stop_voltage - start_voltage) / voltage_step)
-        num_of_read = 28 * trigger_count
+    #     trigger_count = int(1 + (stop_voltage - start_voltage) / voltage_step)
+    #     num_of_read = 28 * trigger_count
 
-        ser_keithley = serial.Serial(port="COM7", baudrate=19200, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
+    #     ser_keithley = serial.Serial(port="COM7", baudrate=38400, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
 
-        #Initialisation of Keithley
-        ser_keithley.write(b'*RST\r')                    #Reset Keithley
-        ser_keithley.write(b':SOUR:FUNC VOLT\r')         #Set Voltage as SOURCE
-        ser_keithley.write(b':SENS:FUNC "CURRENT"\r')    #Set Current as SENSOR
-        ser_keithley.write(b':FORM:ELEM VOLT, CURR\r')   #Retrieve Voltage and Current 
-        ser_keithley.write(b':SENS:VOLT:PROT 5\r')       #Cmpl voltage in Volt
-        ser_keithley.write(b':SENS:CURR:PROT 0.5\r')     #Cmpl current in Ampere
+    #     #Initialisation of Keithley
+    #     ser_keithley.write(b'*RST\r')                    #Reset Keithley
+    #     ser_keithley.write(b':SOUR:FUNC VOLT\r')         #Set Voltage as SOURCE
+    #     ser_keithley.write(b':SENS:FUNC "CURRENT"\r')    #Set Current as SENSOR
+    #     ser_keithley.write(b':FORM:ELEM VOLT, CURR\r')   #Retrieve Voltage and Current 
+    #     ser_keithley.write(b':SENS:VOLT:PROT 5\r')       #Cmpl voltage in Volt
+    #     ser_keithley.write(b':SENS:CURR:PROT 0.5\r')     #Cmpl current in Ampere
+    #     ser_keithley.write(b':SENS:CURR:NPLC 0.1\r')     #AC noise integration time. Longer time will suppress noise level
 
-        ser_keithley.write(b':SOUR:VOLT:START %f\r' %start_voltage)
-        ser_keithley.write(b':SOUR:VOLT:STOP %f\r' %stop_voltage)
-        ser_keithley.write(b':SOUR:VOLT:STEP %f\r' %voltage_step)
-        ser_keithley.write(b':SOUR:VOLT:MODE SWE\r')
-        ser_keithley.write(b':SOUR:SWE:RANG AUTO\r')
-        ser_keithley.write(b':SOUR:SWE:SPAC LIN\r')
-        ser_keithley.write(b':TRIG:COUN %f\r' %trigger_count)
-        ser_keithley.write(b':SOUR:DEL %f\r' %delay_time)
-        ser_keithley.write(b':OUTP ON\r')
-        ser_keithley.write(b':READ?\r')
+    #     ser_keithley.write(b':SOUR:VOLT:START %f\r' %start_voltage)
+    #     ser_keithley.write(b':SOUR:VOLT:STOP %f\r' %stop_voltage)
+    #     ser_keithley.write(b':SOUR:VOLT:STEP %f\r' %voltage_step)
+    #     ser_keithley.write(b':SOUR:VOLT:MODE SWE\r')
+    #     ser_keithley.write(b':SOUR:SWE:RANG AUTO\r')
+    #     ser_keithley.write(b':SOUR:SWE:SPAC LIN\r')
+    #     ser_keithley.write(b':TRIG:COUN %f\r' %trigger_count)
+    #     ser_keithley.write(b':SOUR:DEL %f\r' %delay_time)
+    #     ser_keithley.write(b':OUTP ON\r')
+    #     ser_keithley.write(b':READ?\r')
         
-        raw_data = ser_keithley.read(num_of_read)
+    #     raw_data = ser_keithley.read(num_of_read)
         
-        ser_keithley.write(b':OUTP OFF\r')
+    #     ser_keithley.write(b':OUTP OFF\r')
 
-        #Convert read values to float number and separate to voltage and current
-        value_list_for = [float(i) for i in raw_data.decode('ascii').strip().split(',')]
-        ser_keithley.close()
+    #     #Convert read values to float number and separate to voltage and current
+    #     value_list_for = [float(i) for i in raw_data.decode('ascii').strip().split(',')]
+    #     ser_keithley.close()
         
-        start_voltage = float(self.tc2.GetValue())
-        stop_voltage = float(self.tc3.GetValue())
-        voltage_step = float(self.tc4.GetValue())
-        delay_time = float(self.tc5.GetValue())/1000
+    #     start_voltage = float(self.tc2.GetValue())
+    #     stop_voltage = float(self.tc3.GetValue())
+    #     voltage_step = float(self.tc4.GetValue())
+    #     delay_time = float(self.tc5.GetValue())/1000
                 
-        trigger_count = int(1 + (stop_voltage - start_voltage) / voltage_step)
-        num_of_read = 28 * trigger_count
+    #     trigger_count = int(1 + (stop_voltage - start_voltage) / voltage_step)
+    #     num_of_read = 28 * trigger_count
 
-        ser_keithley = serial.Serial(port="COM7", baudrate=19200, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
+    #     ser_keithley = serial.Serial(port="COM7", baudrate=38400, parity=serial.PARITY_NONE, bytesize=8, stopbits=1)
 
-        #Initialisation of Keithley
-        # ser_keithley.write(b'*RST\r')                    #Reset Keithley
-        ser_keithley.write(b':SOUR:FUNC VOLT\r')         #Set Voltage as SOURCE
-        ser_keithley.write(b':SENS:FUNC "CURRENT"\r')    #Set Current as SENSOR
-        ser_keithley.write(b':FORM:ELEM VOLT, CURR\r')   #Retrieve Voltage and Current 
-        ser_keithley.write(b':SENS:VOLT:PROT 5\r')       #Cmpl voltage in Volt
-        ser_keithley.write(b':SENS:CURR:PROT 0.5\r')     #Cmpl current in Ampere
+    #     #Initialisation of Keithley
+    #     # ser_keithley.write(b'*RST\r')                    #Reset Keithley
+    #     ser_keithley.write(b':SOUR:FUNC VOLT\r')         #Set Voltage as SOURCE
+    #     ser_keithley.write(b':SENS:FUNC "CURRENT"\r')    #Set Current as SENSOR
+    #     ser_keithley.write(b':FORM:ELEM VOLT, CURR\r')   #Retrieve Voltage and Current 
+    #     ser_keithley.write(b':SENS:VOLT:PROT 5\r')       #Cmpl voltage in Volt
+    #     ser_keithley.write(b':SENS:CURR:PROT 0.5\r')     #Cmpl current in Ampere
+    #     ser_keithley.write(b':SENS:CURR:NPLC 0.1\r')     #AC noise integration time. Longer time will suppress noise level
 
-        ser_keithley.write(b':SOUR:VOLT:START %f\r' %stop_voltage)
-        ser_keithley.write(b':SOUR:VOLT:STOP %f\r' %start_voltage)
-        ser_keithley.write(b':SOUR:VOLT:STEP %f\r' %-voltage_step)
-        ser_keithley.write(b':SOUR:VOLT:MODE SWE\r')
-        ser_keithley.write(b':SOUR:SWE:RANG AUTO\r')
-        ser_keithley.write(b':SOUR:SWE:SPAC LIN\r')
-        ser_keithley.write(b':TRIG:COUN %f\r' %trigger_count)
-        ser_keithley.write(b':SOUR:DEL %f\r' %delay_time)
-        ser_keithley.write(b':OUTP ON\r')
-        ser_keithley.write(b':READ?\r')
+    #     ser_keithley.write(b':SOUR:VOLT:START %f\r' %stop_voltage)
+    #     ser_keithley.write(b':SOUR:VOLT:STOP %f\r' %start_voltage)
+    #     ser_keithley.write(b':SOUR:VOLT:STEP %f\r' %-voltage_step)
+    #     ser_keithley.write(b':SOUR:VOLT:MODE SWE\r')
+    #     ser_keithley.write(b':SOUR:SWE:RANG AUTO\r')
+    #     ser_keithley.write(b':SOUR:SWE:SPAC LIN\r')
+    #     ser_keithley.write(b':TRIG:COUN %f\r' %trigger_count)
+    #     ser_keithley.write(b':SOUR:DEL %f\r' %delay_time)
+    #     ser_keithley.write(b':OUTP ON\r')
+    #     ser_keithley.write(b':READ?\r')
         
-        raw_data = ser_keithley.read(num_of_read)
+    #     raw_data = ser_keithley.read(num_of_read)
         
-        ser_keithley.write(b':OUTP OFF\r')
+    #     ser_keithley.write(b':OUTP OFF\r')
 
-        #Convert read values to float number and separate to voltage and current
-        value_list_rev = [float(i) for i in raw_data.decode('ascii').strip().split(',')]
-        ser_keithley.close()
+    #     #Convert read values to float number and separate to voltage and current
+    #     value_list_rev = [float(i) for i in raw_data.decode('ascii').strip().split(',')]
+    #     ser_keithley.close()
 
-        return [value_list_for,value_list_rev]
+    #     return [value_list_for,value_list_rev]
 
 #-----------------------------------------------------------------------------------------
     def mode_select(self, event):           #Dark or Light condition selection function
@@ -458,8 +478,8 @@ class MyFrame(wx.Frame):
         self.Logbox.AppendText('Start to read Jsc of multiple devices')
 
         #select save directory
-        self.saveData()
-        
+        self.set_saveData()
+        hys=self.check_Hysteresis.IsChecked()
         devices = self.tc1.GetValue()       #get device numbers from the text control box as a text
         labels = self.tc8.GetValue().split(",")
         device_list = devices.split(",")    #convert the text format to list form
@@ -472,9 +492,9 @@ class MyFrame(wx.Frame):
             device_num = int(i)
             pixels=[]
             if label_num=='':
-                device_summary = str(device_num)+'_'+self.sfname #+ ".csv"   #Define file name for device's summary data
+                device_name = str(device_num)+'_'+self.sfname #+ ".csv"   #Define file name for device's summary data
             else:
-                device_summary=label_num+self.sfname       
+                device_name=label_num+self.sfname       
             for j in range(1,5):
                 pixel_num = j
                 time.sleep(0.1)
@@ -485,12 +505,8 @@ class MyFrame(wx.Frame):
                 message = 'reading device'+ str(device_num) + '-pixel' + str(pixel_num)
                 time_message = time.strftime("%H:%M:%S", time.gmtime(time.time() - self.start_time))
                 self.Logbox.AppendText('\r' + time_message + '  ' + message)
-                if not self.check_Hysteresis.IsChecked():
-                    value_list = self.OnMeasurement(event)
-                else:
-                    value_list=self.OnMeasurement_Hyst(event)
+                value_list = self.OnMeasurement(event,hys)
                 wx.Yield()                                  #make the GUI keep refresh????
-
                 for vl in value_list:
                     voltage = vl[::2]
                     current = [i/area*1e3 for i in vl[1::2]]
@@ -500,11 +516,11 @@ class MyFrame(wx.Frame):
                     else:
                         direction='reverse'
                         self.matplotlibhrapg.drawData(vl, device_num, str(pixel_num)+'_reverse', area)
-                    pixels.append(jvm.JV(voltage,current,device_summary+'_p'+str(pixel_num)+'_'+direction,direction,P_in))
+                    pixels.append(jvm.JV(voltage,current,device_name+'_p'+str(pixel_num)+'_'+direction,P_in,area))
                 self.pixel_off_stability(device_num, pixel_num)
                 self.Logbox.AppendText('\r' +pixels[-1].__str__())
             # global devicejv
-            devicejv=jvm.deviceJV(pixels,device_summary,'both' if self.check_Hysteresis.IsChecked() else direction,P_in)
+            devicejv=jvm.deviceJV(pixels,device_name,'both' if self.check_Hysteresis.IsChecked() else direction,P_in)
             devicejv.save_device_csv('')
             devicejv.save_device_summary_csv('')
             
@@ -521,7 +537,7 @@ class MyFrame(wx.Frame):
         
 #        self.start_time = time.time()
         
-        self.saveData()
+        self.set_saveData()
         
         devices = self.tc1.GetValue()
         device_list = devices.split(",")
@@ -573,8 +589,8 @@ class MyFrame(wx.Frame):
                         value_list = self.OnMeasurement(event)
                         wx.Yield()
                                 
-                        voltage = value_list[::2]
-                        current = value_list[1::2]
+                        voltage = value_list[0][::2]
+                        current = value_list[0][1::2]
                         
                         self.pixel_off_stability(device_num, pixel_num)
                 
@@ -660,13 +676,13 @@ class MyFrame(wx.Frame):
             sys.exit()
 
 #---------------------------------------------------------------------------------------------
-    def saveData(self):
+    def set_saveData(self):
         root = tk.Tk()	#get root location for the later GUI default start point
         dlg = tkinter.filedialog.asksaveasfilename(confirmoverwrite=False,filetypes=[('csv','.csv')])
         self.fname = dlg
         os.chdir(os.path.split(dlg)[0]) 	#change to the location where works should be done
         self.sfname=os.path.split(dlg)[1]
-        root.withdraw()	#closing the UI interface remanent
+        root.destroy()	#closing the UI interface remanent
 
                 
 #######################################################################
@@ -687,17 +703,17 @@ class MyFrame(wx.Frame):
         
         device_num = int(device_num)
         pixel_num = int(pixel_num)
-        
+        total_pixel_num=4   #indicate the total pixel number of each device
         on_commands = [b'\x65', b'\x66', b'\x67', b'\x68', b'\x69', b'\x6a', b'\x6b', b'\x6c']
 
         #serial port selection for each switch board
         ser_switch = [serial.Serial("COM10", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM9", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM8", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM4", baudrate=9600, bytesize=8 ,stopbits=1)]
-
+        ser_switch[3].write(on_commands[device_num - 1])
         if (device_num % 2 == 0):
-            return ser_switch[3].write(on_commands[int(device_num - 1)]), ser_switch[int((device_num / 2) - 1)].write(on_commands[int(pixel_num + 3)])
-        return ser_switch[3].write(on_commands[int(device_num - 1)]), ser_switch[int((device_num - 1) / 2)].write(on_commands[int(pixel_num - 1)])
-        
-    
+            ser_switch[(device_num-1)//2].write(on_commands[pixel_num+total_pixel_num-1])
+        else:
+            ser_switch[(device_num-1)//2].write(on_commands[pixel_num-1])
+        # why didn't close the serial objects after use?   
     def pixel_off_stability(self, device_num, pixel_num):
 
         device_num = int(device_num)
@@ -706,11 +722,12 @@ class MyFrame(wx.Frame):
         ser_switch = [serial.Serial("COM10", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM9", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM8", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM4", baudrate=9600, bytesize=8 ,stopbits=1)]
         
         off_commands = [b'\x6f', b'\x70', b'\x71', b'\x72', b'\x73', b'\x74', b'\x75', b'\x76']
-
+        ser_switch[3].write(off_commands[device_num-1])
         if (device_num % 2 == 0):
-            return ser_switch[3].write(off_commands[int(device_num - 1)]), ser_switch[int((device_num / 2) - 1)].write(off_commands[int(pixel_num + 3)])
-        return ser_switch[3].write(off_commands[int(device_num - 1)]), ser_switch[int((device_num - 1) / 2)].write(off_commands[int(pixel_num - 1)])
-
+            ser_switch[(device_num-1)//2].write(off_commands[pixel_num+3])
+        else:
+            ser_switch[(device_num-1)//2].write(off_commands[pixel_num-1])
+            # why didn't close the serial objects after use?   
 class MatplotPanel(wx.Window):
     
     def __init__(self, parent):
