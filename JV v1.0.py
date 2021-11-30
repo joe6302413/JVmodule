@@ -11,7 +11,7 @@ Last editing time:
 import matplotlib.pyplot as plt, tkinter as tk, tkinter.filedialog
 from os.path import normpath,split
 from os import getenv
-from JVmodule import deviceJV
+from JVmodule import dark_PVdevice, light_PVdevice
 onedrive=getenv('OneDrive')
 JVdir=normpath(onedrive+'\\Data\\JV')
 
@@ -27,10 +27,13 @@ root.destroy()
 
 #%% load files into devices
 plt.close('all')
-devices=deviceJV.import_from_files(filenames,direction='reverse',header_length=3,power=100,trunc=-4)
+# devices=dark_PVdevice.import_from_files(filenames,direction='reverse',header_length=1,trunc=-25)
+devices=light_PVdevice.import_from_files(filenames,direction='reverse',header_length=1,trunc=-25,power_in=100)
+
+#%% calibrate current to current density
+devices=light_PVdevice._calibrate_Gihan_devices(devices)
 
 #%% Saving APS and APS fit and HOMO with error
 location=split(filenames[0])[0]
-for i in devices:
-    # i.save_device_csv(location)
-    i.save_device_summary_csv(location)
+for device in devices:
+    device.save_all(location+'\\processed')

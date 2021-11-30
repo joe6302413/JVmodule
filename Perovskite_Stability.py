@@ -501,10 +501,11 @@ class MyFrame(wx.Frame):
                 
                 self.pixel_on_stability(device_num, pixel_num)  #switch on a pixel which is to be measured
                                 
-                print('reading device #', str(device_num), '-pixel #', str(pixel_num))
-                message = 'reading device'+ str(device_num) + '-pixel' + str(pixel_num)
+                
+                message = f'reading device #{device_num}-pixel #{pixel_num}'
+                print(message)
                 time_message = time.strftime("%H:%M:%S", time.gmtime(time.time() - self.start_time))
-                self.Logbox.AppendText('\r' + time_message + '  ' + message)
+                self.Logbox.AppendText(f'\r{time_message}  {message}')
                 value_list = self.OnMeasurement(event,hys)
                 wx.Yield()                                  #make the GUI keep refresh????
                 for vl in value_list:
@@ -516,13 +517,20 @@ class MyFrame(wx.Frame):
                     else:
                         direction='reverse'
                         self.matplotlibhrapg.drawData(vl, device_num, str(pixel_num)+'_reverse', area)
-                    pixels.append(jvm.JV(voltage,current,device_name+'_p'+str(pixel_num)+'_'+direction,P_in,area))
+                    if self.check_Light.IsChecked():
+                        pixels.append(jvm.light_PV(voltage,current,f'{device_name}_p{pixel_num}_{direction}',area,P_in))
+                    elif self.check_Dark.IsChecked():
+                        pixels.append(jvm.dark_PV(voltage,current,f'{device_name}_p{pixel_num}_{direction}',area))
+                    else:
+                        raise Exception('light or dark must select one!')
                 self.pixel_off_stability(device_num, pixel_num)
-                self.Logbox.AppendText('\r' +pixels[-1].__str__())
+                self.Logbox.AppendText(f'\r{pixels[-1].__str__()}')
             # global devicejv
-            devicejv=jvm.deviceJV(pixels,device_name,'both' if self.check_Hysteresis.IsChecked() else direction,P_in)
-            devicejv.save_device_csv('')
-            devicejv.save_device_summary_csv('')
+            if self.check_Light.IsChecked():
+                device=jvm.light_PVdeviceJV(pixels,device_name,'both' if self.check_Hysteresis.IsChecked() else direction,area,P_in)
+            else:
+                device=jvm.dark_PVdeviceJV(pixels,device_name,'both' if self.check_Hysteresis.IsChecked() else direction,area)
+            device.save_all('')
             
         self.Logbox.AppendText('\rCompleted Jsc measurement!')
         self.Logbox.AppendText('\rIf you want to measure other samples continuously, Press RESTART BUTTON otherwise Press FINISH Button')
@@ -708,7 +716,7 @@ class MyFrame(wx.Frame):
 
         #serial port selection for each switch board
         ser_switch = [serial.Serial("COM10", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM9", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM8", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM4", baudrate=9600, bytesize=8 ,stopbits=1)]
-        ser_switch[3].write(on_commands[device_num - 1])
+        ser_switch[-1].write(on_commands[device_num - 1])
         if (device_num % 2 == 0):
             ser_switch[(device_num-1)//2].write(on_commands[pixel_num+total_pixel_num-1])
         else:
@@ -722,7 +730,7 @@ class MyFrame(wx.Frame):
         ser_switch = [serial.Serial("COM10", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM9", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM8", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM4", baudrate=9600, bytesize=8 ,stopbits=1)]
         
         off_commands = [b'\x6f', b'\x70', b'\x71', b'\x72', b'\x73', b'\x74', b'\x75', b'\x76']
-        ser_switch[3].write(off_commands[device_num-1])
+        ser_switch[-1].write(off_commands[device_num-1])
         if (device_num % 2 == 0):
             ser_switch[(device_num-1)//2].write(off_commands[pixel_num+3])
         else:
