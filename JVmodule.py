@@ -211,7 +211,7 @@ class dark_PVdevice:
 
     def save_all(self,location):
         self.save_device_csv(location)
-    
+
     @classmethod
     def import_from_files(cls,filenames,direction='forward',header_length=3,
                           p_area=0.045,trunc=-4,**kwargs):

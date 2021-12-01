@@ -713,29 +713,36 @@ class MyFrame(wx.Frame):
         pixel_num = int(pixel_num)
         total_pixel_num=4   #indicate the total pixel number of each device
         on_commands = [b'\x65', b'\x66', b'\x67', b'\x68', b'\x69', b'\x6a', b'\x6b', b'\x6c']
+        pix_switch_COM=['COM10','COM9','COM8']
+        pix_switch_n=(device_num-1)//2
+        pix_command_n=pixel_num+total_pixel_num-1 if device_num % 2 == 0 else \
+            pixel_num-1
+        dev_switch_COM=['COM4']
+        dev_switch_n=0
+        dev_command_n=device_num - 1
+        with serial.Serial(port=pix_switch_COM[pix_switch_n]) as ser_pix,\
+            serial.Serial(port=dev_switch_COM[dev_switch_n]) as ser_dev:
+                ser_pix.write(on_commands[pix_command_n])
+                ser_dev.write(on_commands[dev_command_n])
 
-        #serial port selection for each switch board
-        ser_switch = [serial.Serial("COM10", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM9", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM8", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM4", baudrate=9600, bytesize=8 ,stopbits=1)]
-        ser_switch[-1].write(on_commands[device_num - 1])
-        if (device_num % 2 == 0):
-            ser_switch[(device_num-1)//2].write(on_commands[pixel_num+total_pixel_num-1])
-        else:
-            ser_switch[(device_num-1)//2].write(on_commands[pixel_num-1])
-        # why didn't close the serial objects after use?   
     def pixel_off_stability(self, device_num, pixel_num):
 
         device_num = int(device_num)
         pixel_num = int(pixel_num)
-        
-        ser_switch = [serial.Serial("COM10", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM9", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM8", baudrate=9600, bytesize=8 ,stopbits=1), serial.Serial("COM4", baudrate=9600, bytesize=8 ,stopbits=1)]
-        
+        total_pixel_num=4   #indicate the total pixel number of each device
         off_commands = [b'\x6f', b'\x70', b'\x71', b'\x72', b'\x73', b'\x74', b'\x75', b'\x76']
-        ser_switch[-1].write(off_commands[device_num-1])
-        if (device_num % 2 == 0):
-            ser_switch[(device_num-1)//2].write(off_commands[pixel_num+3])
-        else:
-            ser_switch[(device_num-1)//2].write(off_commands[pixel_num-1])
-            # why didn't close the serial objects after use?   
+        pix_switch_COM=['COM10','COM9','COM8']
+        pix_switch_n=(device_num-1)//2
+        pix_command_n=pixel_num+total_pixel_num-1 if device_num % 2 == 0 else \
+            pixel_num-1
+        dev_switch_COM=['COM4']
+        dev_switch_n=0
+        dev_command_n=device_num - 1
+        with serial.Serial(port=pix_switch_COM[pix_switch_n]) as ser_pix,\
+            serial.Serial(port=dev_switch_COM[dev_switch_n]) as ser_dev:
+                ser_pix.write(off_commands[pix_command_n])
+                ser_dev.write(off_commands[dev_command_n])
+                
 class MatplotPanel(wx.Window):
     
     def __init__(self, parent):
