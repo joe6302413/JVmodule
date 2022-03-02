@@ -53,7 +53,7 @@ class JV:
         Name is a string.
         '''
         assert len(J)==len(V), 'number of Current-Voltage data not matching'
-        self.V,self.J,self.name=V,J,name
+        self.V,self.J,self.name=np.array(V),np.array(J),name
         self.status={}
         
     def __repr__(self):
@@ -100,7 +100,7 @@ class dark_PV(JV):
         
 class light_PV(dark_PV):
     def __init__(self,V,J,name='no_name_light_PV',p_area=0.045,power_in=100,
-                 **kwargs):
+                 time=None,**kwargs):
         '''
         V and J are list of voltage (V) and current density (mA/cm$^{2}$).
         Name is a string. Power_in is the input power in unit of mW/cm^2 
@@ -108,7 +108,7 @@ class light_PV(dark_PV):
         '''
         # assert direction in ('forward','reverse'), 'direction has to be either forward or reverse'
         super().__init__(V,J,name,p_area)
-        self.power_in=power_in
+        self.power_in,self.time=power_in,time
         self.status.update({'power input': f'{power_in} mW/cm^2'})
         self.find_characters()
     
@@ -276,12 +276,14 @@ class light_PVdevice(dark_PVdevice):
         self.status.update({'power_in': f'{power_in} mW/cm^2'})
         
     def save_device_summary_csv(self,location):
-        origin_header=[['Pixels']+[self.name]*4,[None,'V','mA/cm\\+(2)','%','%']]
-        datanames=[['V\\-(oc)','J\\-(sc)','FF','PCE']]
+        origin_header=[['Pixels']+[None]*5,
+                       [None,'s','V','mA/cm\\+(2)','%','%']]
+        datanames=[['time','V\\-(oc)','J\\-(sc)','FF','PCE']]
         #making the arrays of each element
-        x,Voc,Jsc,FF,PCE=[],[],[],[],[]
+        x,time,Voc,Jsc,FF,PCE=[],[],[],[],[],[]
         for i in self.pixels:
             x.append(i.name)
+            time.append(i.time)
             Voc.append(i.Voc)
             Jsc.append(i.Jsc)
             FF.append(i.FF)
@@ -289,16 +291,16 @@ class light_PVdevice(dark_PVdevice):
         if self.direction=='both':
             filename=f"{self.name}_summary_{self.pixels[0].status['direction']}"
             #making each element into 2D arrays
-            data=([x[::2]],[Voc[::2]],[Jsc[::2]],[FF[::2]],[PCE[::2]])
+            data=([x[::2]],[time[::2]],[Voc[::2]],[Jsc[::2]],[FF[::2]],[PCE[::2]])
             save_csv_for_origin(data,location,filename,datanames,origin_header)
             filename=f"{self.name}_summary_{self.pixels[1].status['direction']}"
             #making each element into 2D arrays
-            data=([x[1::2]],[Voc[1::2]],[Jsc[1::2]],[FF[1::2]],[PCE[1::2]])
+            data=([x[1::2]],[time[1::2]],[Voc[1::2]],[Jsc[1::2]],[FF[1::2]],[PCE[1::2]])
             save_csv_for_origin(data,location,filename,datanames,origin_header)
         else:
             filename=f'{self.name}_summary'
             #making each element into 2D arrays
-            data=([x],[Voc],[Jsc],[FF],[PCE])
+            data=([x],[time],[Voc],[Jsc],[FF],[PCE])
             save_csv_for_origin(data,location,filename,datanames,origin_header)
     
     def save_all(self,location):
