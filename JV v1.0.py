@@ -29,7 +29,7 @@ root.destroy()
 plt.close('all')
 # devices=dark_PVdevice.import_from_files(filenames,direction='reverse',header_length=1,trunc=-25)
 # devices=light_PVdevice.import_from_files(filenames,direction='both',header_length=1,trunc=-25,power_in=100)
-devices=light_PVdevice.import_from_files(filenames,direction='both',header_length=3,trunc=-4,power_in=100)
+devices=light_PVdevice.import_from_files(filenames,direction='both',header_length=3,trunc=-4,p_area=0.045,power_in=100)
 
 #%% calibrate current to current density
 devices=light_PVdevice._calibrate_Gihan_devices(devices)

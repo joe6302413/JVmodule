@@ -80,6 +80,7 @@ class dark_PV(JV):
         self.p_area=p_area
         self.status={'direction': self.direction,
                      'pixel area': f'{p_area} cm^2'}
+        self.__dict__.update(kwargs)
     
     def plot(self):
         plt.grid(True,which='both',axis='x')
@@ -100,17 +101,22 @@ class dark_PV(JV):
         
 class light_PV(dark_PV):
     def __init__(self,V,J,name='no_name_light_PV',p_area=0.045,power_in=100,
-                 time=None,**kwargs):
+                 **kwargs):
         '''
         V and J are list of voltage (V) and current density (mA/cm$^{2}$).
         Name is a string. Power_in is the input power in unit of mW/cm^2 
         and size is in unit of cm$^{2}$.
         '''
         # assert direction in ('forward','reverse'), 'direction has to be either forward or reverse'
-        super().__init__(V,J,name,p_area)
-        self.power_in,self.time=power_in,time
+        super().__init__(V,J,name,p_area,**kwargs)
+        self.power_in=power_in
         self.status.update({'power input': f'{power_in} mW/cm^2'})
         self.find_characters()
+    
+    @property
+    def characters(self):
+        return {'name':self.name,'time':self.time,'Voc':self.Voc,'Jsc':self.Jsc,
+                'FF':self.FF,'PCE':self.PCE}
     
     def update_characters_status(self):
         self.status.update({'Jsc':f'{self.Jsc:.2f} mA/cm^2',
@@ -274,16 +280,19 @@ class light_PVdevice(dark_PVdevice):
             'light_PVdevice only takes list(tuple) of light_PV objects'
         super().__init__(pixels,device_name,direction,p_area)
         self.status.update({'power_in': f'{power_in} mW/cm^2'})
-        
+    
+    @property
+    def characters(self):
+        return {pixel.name: pixel.characters for pixel in self.pixels}
+    
     def save_device_summary_csv(self,location):
-        origin_header=[['Pixels']+[None]*5,
-                       [None,'s','V','mA/cm\\+(2)','%','%']]
-        datanames=[['time','V\\-(oc)','J\\-(sc)','FF','PCE']]
+        origin_header=[['Pixels']+[None]*4,
+                       [None,'V','mA/cm\\+(2)','%','%']]
+        datanames=[['V\\-(OC)','J\\-(SC)','FF','PCE']]
         #making the arrays of each element
-        x,time,Voc,Jsc,FF,PCE=[],[],[],[],[],[]
+        x,Voc,Jsc,FF,PCE=[],[],[],[],[]
         for i in self.pixels:
             x.append(i.name)
-            time.append(i.time)
             Voc.append(i.Voc)
             Jsc.append(i.Jsc)
             FF.append(i.FF)
@@ -291,16 +300,16 @@ class light_PVdevice(dark_PVdevice):
         if self.direction=='both':
             filename=f"{self.name}_summary_{self.pixels[0].status['direction']}"
             #making each element into 2D arrays
-            data=([x[::2]],[time[::2]],[Voc[::2]],[Jsc[::2]],[FF[::2]],[PCE[::2]])
+            data=([x[::2]],[Voc[::2]],[Jsc[::2]],[FF[::2]],[PCE[::2]])
             save_csv_for_origin(data,location,filename,datanames,origin_header)
             filename=f"{self.name}_summary_{self.pixels[1].status['direction']}"
             #making each element into 2D arrays
-            data=([x[1::2]],[time[1::2]],[Voc[1::2]],[Jsc[1::2]],[FF[1::2]],[PCE[1::2]])
+            data=([x[1::2]],[Voc[1::2]],[Jsc[1::2]],[FF[1::2]],[PCE[1::2]])
             save_csv_for_origin(data,location,filename,datanames,origin_header)
         else:
             filename=f'{self.name}_summary'
             #making each element into 2D arrays
-            data=([x],[time],[Voc],[Jsc],[FF],[PCE])
+            data=([x],[Voc],[Jsc],[FF],[PCE])
             save_csv_for_origin(data,location,filename,datanames,origin_header)
     
     def save_all(self,location):
