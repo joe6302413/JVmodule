@@ -14,9 +14,14 @@ Last editing time: 12/11/2020
 import numpy as np
 import csv
 import matplotlib.pyplot as plt
-from os.path import split,join
+from os.path import split,join,exists
+from typing import List,Tuple
+import tkinter as tk
+from tkinter.filedialog import asksaveasfilename
 
-def save_csv_for_origin(data,location,filename=None,datanames=None,header=None):
+def save_csv_for_origin(data:Tuple[List[List[float]]],location:str,
+                        filename:str=None,datanames:List[List[str]]=None,
+                        header:List[List[str]]=None) -> None: 
     '''
     save data sets to csv format for origin.
     data=([x1,x2,...],[y1,y2,...],...) where each element is a list of array
@@ -25,6 +30,17 @@ def save_csv_for_origin(data,location,filename=None,datanames=None,header=None):
     datanames=[[yname1,zname1,...],[yname2,zname2]] names should be for each individual data sets
     header=[[longname X, longname Y,...],[unit X, unit Y,...]]
     '''
+    path_name=join(location,str(filename)+'.csv')
+    if exists(path_name):
+        root=tk.Tk()
+        filename=asksaveasfilename(title=f'rename save file name for {filename}',
+                                   initialdir=location,filetypes=[('csv','.csv')],
+                                   defaultextension='.csv',initialfile=filename)
+        if filename=='':
+            raise Exception('saving process cancelled due to overwriting.')
+        path_name=join(location,str(filename))
+        root.destroy()
+        
     data_dim=len(data)
     assert [len(i) for i in data][1:]==[len(i) for i in data][:-1], 'number of data mismatch'
     assert len(header[0])==data_dim, 'header mismatch data dimension'
@@ -40,7 +56,7 @@ def save_csv_for_origin(data,location,filename=None,datanames=None,header=None):
         header=datanames+[['']*numberofdata*data_dim]
     else:
         header=[i*numberofdata for i in header]
-    with open(join(location,str(filename)+'.csv'),'w',newline='') as f:
+    with open(path_name,'w',newline='') as f:
         writer=csv.writer(f)
         writer.writerows(header)
         writer.writerows(datanames)
@@ -113,11 +129,6 @@ class light_PV(dark_PV):
         self.status.update({'power input': f'{power_in} mW/cm^2'})
         self.find_characters()
     
-    @property
-    def characters(self):
-        return {'name':self.name,'time':self.time,'Voc':self.Voc,'Jsc':self.Jsc,
-                'FF':self.FF,'PCE':self.PCE}
-    
     def update_characters_status(self):
         self.status.update({'Jsc':f'{self.Jsc:.2f} mA/cm^2',
                      'Voc': f'{self.Voc:.2f} V','FF':f'{self.FF:.2f}',
@@ -173,46 +184,73 @@ class light_PV(dark_PV):
             return np.nan
         
 class dark_PVdevice:
-    func=dark_PV
-    def __init__(self,pixels,device_name='dark_device',direction='forward',p_area=0.045):
-        assert isinstance(pixels,(list,tuple)),'device must be a tuple or list'
-        assert all(isinstance(i,dark_PV) for i in pixels), 'dark_PVdevice only takes list(tuple) of dark_PV objects'
+    _func=dark_PV
+    def __init__(self,scans,device_name='dark_device',direction='forward',p_area=0.045):
+        assert isinstance(scans,(list,tuple)),'device must be a tuple or list'
+        assert all(isinstance(i,dark_PV) for i in scans), 'dark_PVdevice only takes list(tuple) of dark_PV objects'
         assert direction in ('forward','reverse','both'), 'direction must be forward, reverse or both'
         if direction!='both':
-            assert all([i.status['direction']==pixels[0].status['direction'] 
-                        for i in pixels[1:]]), 'same device must have the same direction'
-            if not pixels[0].status['direction']==direction:
-                direction=pixels[0].status['direction']
+            assert all([i.status['direction']==scans[0].status['direction'] 
+                        for i in scans[1:]]), 'same device must have the same direction'
+            if not scans[0].status['direction']==direction:
+                direction=scans[0].status['direction']
                 print('Correcting direction for '+device_name+'!')
         else:
-            assert all([i.status['direction']==pixels[0].status['direction'] 
-                        for i in pixels[2::2]]), 'even pixels are not having the same direction'
-            assert all([i.status['direction']==pixels[1].status['direction'] 
-                        for i in pixels[3::2]]), 'odd pixels are not having the same direction'
-            assert pixels[0].status['direction']!=pixels[1].status['direction'], 'This device is not scanned in both directions'
-        self.direction,self.pixels,self.name=direction,pixels,device_name
-        self.pix_n=len(pixels) if direction in ('forward','reverse') else len(pixels)/2
-        self.status={'direction': direction,'number of pixels': self.pix_n,
-                     'pixel area': f'{p_area} cm^2'}
-        
+            assert all([i.status['direction']==scans[0].status['direction'] 
+                        for i in scans[2::2]]), 'even scans are not having the same direction'
+            assert all([i.status['direction']==scans[1].status['direction'] 
+                        for i in scans[3::2]]), 'odd scans are not having the same direction'
+            assert scans[0].status['direction']!=scans[1].status['direction'], 'This device is not scanned in both directions'
+        self.direction,self.scans,self.name=direction,scans,device_name
+        self.status={'direction': direction,'pixel area': f'{p_area} cm^2'}
+    
+    @property
+    def pixels(self) -> List[Tuple[light_PV]]:
+        if self.direction=='both':
+            return list(zip(self.scans[::2],self.scans[1::2]))
+        else:
+            return [(scan,)for scan in self.scans]
+    
+    @property
+    def pixels_forward(self) -> List[light_PV]:
+        if self.direction=='forward':
+            return self.scans
+        elif self.direction=='reverse':
+            return []
+        else:
+            pixels=self.pixels
+            return [pixel[1] if pixel[0].direction=='reverse' else
+                    pixel[0] for pixel in pixels]
+    
+    @property
+    def pixels_reverse(self) -> List[light_PV]:
+        if self.direction=='forward':
+            return []
+        elif self.direction=='reverse':
+            return self.scans
+        else:
+            pixels=self.pixels
+            return [pixel[0] if pixel[0].direction=='reverse' else
+                    pixel[1] for pixel in pixels]
+    
     def __repr__(self):
         return self.name
     
     def __str__(self):
         summary='Name:\t'+self.name+'\n'
         summary+='\n'.join([f'{i}:\t{j}' for i,j in self.status.items()])+'\n'
-        summary+='Contains:\n'+'\n'.join([i.name for i in self.pixels])+'\n'
+        summary+='Contains:\n'+'\n'.join([i.name for i in self.scans])+'\n'
         return summary
     
     def plot(self):
-        for pixel in self.pixels:
-            pixel.plot()
+        for scan in self.scans:
+            scan.plot()
     
     def save_device_csv(self,location):
         filename=self.name
-        datanames=[[i.name] for i in self.pixels]
+        datanames=[[i.name] for i in self.scans]
         origin_header=[['Voltage','Current Density'],['V','mA/cm\\+(2)']]
-        x,y=[i.V for i in self.pixels],[i.J for i in self.pixels]
+        x,y=[i.V for i in self.scans],[i.J for i in self.scans]
         save_csv_for_origin((x,y),location,filename,datanames,origin_header)
 
     def save_all(self,location):
@@ -224,18 +262,18 @@ class dark_PVdevice:
         devices=[]
         for i in filenames:
             filename=split(i)[1][:trunc]
-            pixels=[]
+            scans=[]
             V,J,name=cls.read_file(i,direction,header_length,trunc)
             for v,j,n in zip(V,J,name):
-                pixels.append(cls.func(v,j,n,p_area,**kwargs))
-            devices.append(cls(pixels,filename,direction,p_area,**kwargs))
+                scans.append(cls._func(v,j,n,p_area,**kwargs))
+            devices.append(cls(scans,filename,direction,p_area,**kwargs))
         return devices
     
     @staticmethod
     def _calibrate_Gihan_devices(devices):
         for device in devices:
-            for pixel in device.pixels:
-                pixel._I_to_J()
+            for scan in device.scans:
+                scan._I_to_J()
         return devices
     
     @staticmethod
@@ -262,54 +300,79 @@ class dark_PVdevice:
                     else:
                         V.append(data[:,2*n])
                         J.append(data[:,2*n+1])
-                        pix_direction='forward' if diff[0]>0 else 'reverse'
-                        name.append(f'{filename_no_abs}_p{n//2}_{pix_direction}')
+                        scan_direction='forward' if diff[0]>0 else 'reverse'
+                        name.append(f'{filename_no_abs}_p{n//2}_{scan_direction}')
                 else:
                     V.append(data[:,2*n])
                     J.append(data[:,2*n+1])
                     name.append(f'{filename_no_abs}_p{n}_{direction}')
         return V,J,name
     
-    
-    
 class light_PVdevice(dark_PVdevice):
-    func=light_PV
-    def __init__(self,pixels,device_name='light_device',direction='forward',
+    _func=light_PV
+    def __init__(self,scans,device_name='light_device',direction='forward',
                  p_area=0.045,power_in=100):
-        assert all(isinstance(i,light_PV) for i in pixels), \
+        assert all(isinstance(i,light_PV) for i in scans), \
             'light_PVdevice only takes list(tuple) of light_PV objects'
-        super().__init__(pixels,device_name,direction,p_area)
+        super().__init__(scans,device_name,direction,p_area)
         self.status.update({'power_in': f'{power_in} mW/cm^2'})
     
     @property
-    def characters(self):
-        return {pixel.name: pixel.characters for pixel in self.pixels}
+    def hys(self):
+        if self.direction=='both':
+            PCE_for=np.array([pix.PCE for pix in self.pixels_forward])
+            PCE_rev=np.array([pix.PCE for pix in self.pixels_reverse])
+            return (PCE_rev-PCE_for)/PCE_rev*100
+        else:
+            raise AttributeError(f'\'{self.name}\' does not have both '\
+                                 'directional scans')
+    
+    def character(self, dev_char:str)->np.array:
+        try:
+            return np.array([[scan.__dict__[dev_char] for scan in pix]
+                             for pix in self.pixels])
+        except KeyError:
+            raise KeyError(f'character {dev_char} does not exist.')
+        
+    def find_best_scan(self, dev_char:str='PCE') -> light_PV:
+        '''
+        Find the best pixel based on the dev_char.
+    
+        Parameters
+        ----------
+        dev_char : str, optional
+            comparison criterion. One device characters among Voc, Jsc, FF,PCE.
+            The default is 'PCE':str.
+    
+        Returns : light_PV
+        -------
+        light_PV
+            The best pixel among the device based on given dev_char.
+            
+        '''
+        char_list=[scan.__dict__[dev_char] for scan in self.scans]
+        i=char_list.index(max(char_list))
+        return self.scans[i]
     
     def save_device_summary_csv(self,location):
-        origin_header=[['Pixels']+[None]*4,
-                       [None,'V','mA/cm\\+(2)','%','%']]
-        datanames=[['V\\-(OC)','J\\-(SC)','FF','PCE']]
         #making the arrays of each element
-        x,Voc,Jsc,FF,PCE=[],[],[],[],[]
-        for i in self.pixels:
-            x.append(i.name)
-            Voc.append(i.Voc)
-            Jsc.append(i.Jsc)
-            FF.append(i.FF)
-            PCE.append(i.PCE)
+        char_list=['name','Voc','Jsc','FF','PCE']
+        name,Voc,Jsc,FF,PCE=[self.character(char).T for char in char_list]
+        filename=f'{self.name}_summary'
         if self.direction=='both':
-            filename=f"{self.name}_summary_{self.pixels[0].status['direction']}"
-            #making each element into 2D arrays
-            data=([x[::2]],[Voc[::2]],[Jsc[::2]],[FF[::2]],[PCE[::2]])
-            save_csv_for_origin(data,location,filename,datanames,origin_header)
-            filename=f"{self.name}_summary_{self.pixels[1].status['direction']}"
-            #making each element into 2D arrays
-            data=([x[1::2]],[Voc[1::2]],[Jsc[1::2]],[FF[1::2]],[PCE[1::2]])
+            hys=self.hys[None].repeat(2,0)
+            origin_header=[['scans']+[None]*5,
+                           [None,'V','mA/cm\\+(2)','%','%','%']]
+            datanames=[['V\\-(OC)','J\\-(SC)','FF','PCE','Hysteresis index']]*2
+            data=(name,Voc,Jsc,FF,PCE,hys)
             save_csv_for_origin(data,location,filename,datanames,origin_header)
         else:
+            origin_header=[['scans']+[None]*4,
+                           [None,'V','mA/cm\\+(2)','%','%']]
+            datanames=[['V\\-(OC)','J\\-(SC)','FF','PCE']]
             filename=f'{self.name}_summary'
             #making each element into 2D arrays
-            data=([x],[Voc],[Jsc],[FF],[PCE])
+            data=(name,Voc,Jsc,FF,PCE)
             save_csv_for_origin(data,location,filename,datanames,origin_header)
     
     def save_all(self,location):

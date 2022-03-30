@@ -11,7 +11,7 @@ Last editing time:
 import matplotlib.pyplot as plt, tkinter as tk, tkinter.filedialog
 from os.path import normpath,split
 from os import getenv
-from JVmodule import dark_PVdevice, light_PVdevice
+import JVmodule as jvm
 onedrive=getenv('OneDrive')
 JVdir=normpath(onedrive+'\\Data\\JV')
 
@@ -27,14 +27,14 @@ root.destroy()
 
 #%% load files into devices
 plt.close('all')
-# devices=dark_PVdevice.import_from_files(filenames,direction='reverse',header_length=1,trunc=-25)
-# devices=light_PVdevice.import_from_files(filenames,direction='both',header_length=1,trunc=-25,power_in=100)
-devices=light_PVdevice.import_from_files(filenames,direction='both',header_length=3,trunc=-4,p_area=0.045,power_in=100)
+# devices=jvm.dark_PVdevice.import_from_files(filenames,direction='reverse',header_length=1,trunc=-25)
+# devices=jvm.light_PVdevice.import_from_files(filenames,direction='both',header_length=1,trunc=-25,power_in=100)
+devices=jvm.light_PVdevice.import_from_files(filenames,direction='both',header_length=3,trunc=-4,p_area=0.045,power_in=100)
 
 #%% calibrate current to current density
-devices=light_PVdevice._calibrate_Gihan_devices(devices)
+devices=jvm.light_PVdevice._calibrate_Gihan_devices(devices)
 
-#%% Saving APS and APS fit and HOMO with error
+#%% Saving JV and device summary
 location=split(filenames[0])[0]
 for device in devices:
     device.save_all(location+'\\processed')

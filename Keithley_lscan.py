@@ -9,18 +9,32 @@ import numpy as np
 import JVmodule as jvm
 import tkinter as tk, tkinter.filedialog
 import switchbox as swb
-# import os.path
 import matplotlib.pyplot as plt
 import time
 import threading
 import csv
 from typing import List
+from os.path import split,join,exists
 
 class keithley_lscan:
-    def __init__(self,keith_com,baudrate=38400,timeout=3):
+    def __init__(self,keith_com,baudrate=38400,timeout=1e-1):
         self._keith_com=keith_com
         self._baudrate=baudrate
         self._timeout=timeout
+        if not self._is_on:
+            raise Exception('No respond from Keithley. Check if it is on '\
+                            'or restart it.')
+    
+    @property
+    def _is_on(self):
+        with serial.Serial(self._keith_com, baudrate=38400, timeout=self._timeout
+                           ) as ser_keithley:
+            ser_keithley.write(b'*rst\r')
+            ser_keithley.write(b':STAT:MEAS?\r')
+            if not ser_keithley.readline():
+                return False
+            else:
+                return True
     
     def scan(self,start_v,stop_v,v_step,nplc,hys=False):
         if (stop_v-start_v)*v_step<0:
@@ -29,8 +43,7 @@ class keithley_lscan:
         trigger_count = int(1 + (stop_v-start_v)/v_step)
         num_of_read=28*trigger_count
         
-        with serial.Serial(self._keith_com,self._baudrate,timeout=self._timeout
-                           ) as ser_keithley:
+        with serial.Serial(self._keith_com,self._baudrate) as ser_keithley:
             #Initialisation of Keithley
             ser_keithley.write(b'*RST\r')                    #Reset Keithley
             ser_keithley.write(b':SOUR:FUNC VOLT\r')         #Set Voltage as SOURCE
@@ -49,9 +62,6 @@ class keithley_lscan:
             ser_keithley.write(b':READ?\r')
             raw_data=ser_keithley.read(num_of_read)
             #Convert read values to float number and separate to voltage and current
-            if raw_data==b'':
-                raise Exception('No respond from Keithley. Check if it is on '\
-                                'or restart it.')
             value_lists = [[float(i) for i in 
                             raw_data.decode('ascii').strip().split(',')]]
             if hys:
@@ -68,58 +78,69 @@ class keithley_lscan:
             c_list.append(np.array(value[1::2])*1e3)
         return v_list,c_list
 
-def make_soak_summary_header(names,scan_n):
+def make_soak_summary_header(names,scan_n,hys=False):
     for name in names:
-            with open(name,mode='w',newline='') as f:
-                writer=csv.writer(f)
-                writer.writerows([['pixel',None,None,None,None,None]*scan_n,
-                         [None,'s','V','mA/cm\\+(2)','%','%']*scan_n,
-                         [None,'soak_time','V\\-(OC)','J\\-(SC)','FF','PCE']*scan_n])
+        if exists(name):
+            path,filename=split(name)
+            root=tk.Tk()
+            filename=tk.filedialog.asksaveasfilename(title=f'rename save file name for {filename}',
+                                       initialdir=path,filetypes=[('csv','.csv')],
+                                       defaultextension='.csv',initialfile=filename)
+            if filename=='':
+                raise Exception('saving process cancelled due to overwriting.')
+            name=join(path,str(filename))
+            root.destroy()
+        with open(name,mode='w',newline='') as f:
+            writer=csv.writer(f)
+            if hys:
+                writer.writerows([['pixel','soak_time','V\\-(OC)','J\\-(SC)',
+                                   'FF','PCE','hysteresis index']*scan_n,
+                                  [None,'s','V','mA/cm\\+(2)','%','%','%']*scan_n,
+                                  [None,'soak_time','V\\-(OC)','J\\-(SC)','FF',
+                                   'PCE','hysteresis index']*scan_n])
+            else:
+                writer.writerows([['pixel','soak_time','V\\-(OC)','J\\-(SC)',
+                                   'FF','PCE']*scan_n,
+                                  [None,'s','V','mA/cm\\+(2)','%','%']*scan_n,
+                                  [None,'soak_time','V\\-(OC)','J\\-(SC)','FF',
+                                   'PCE']*scan_n])
                 
-def save_soak_summary(names,devices):
+def save_soak_summary(names:List[str],devices:List[jvm.light_PVdevice],hys:bool=False):
+    chars=('name','time','Voc','Jsc','FF','PCE')
     for name,device in zip(names,devices):
         with open(name,mode='a',newline='') as f:
             writer=csv.writer(f)
-            writer.writerows([[str(value2) for value1 in device.characters.values()
-                               for value2 in value1.values()]])
+            s_name,time,Voc,Jsc,FF,PCE=[device.character(char).flatten() 
+                                        for char in chars]
+            if not hys:
+                row=[[j for i in zip(s_name,time,Voc,Jsc,FF,PCE) for j in i]]
+            else:
+                hys_ind=device.hys.repeat(2)
+                row=[[j for i in zip(s_name,time,Voc,Jsc,FF,PCE,hys_ind) for j in i]]
+            writer.writerows(row)
 
-def soaking_plot(data:List[List[jvm.light_PVdevice]], dev_char:str='PCE')->None:
+def soaking_plot(data:List[List[jvm.light_PVdevice]], dev_char:str='PCE', 
+                 norm:bool=False)->None:
     '''
     '''
     names=list(map(lambda i: i.name,data[0]))
-    t_pixels=[list(map(find_best_pixel,device)) for device in data]
-    t=np.array([[pixel.time for pixel in pixels] 
-                for pixels in t_pixels])
-    char=np.array([[pixel.__dict__[dev_char] for pixel in pixels] 
-                        for pixels in t_pixels])
-    plt.figure(f'Soaking_{dev_char} vs. time')
+    t_scans=[[device.find_best_scan(dev_char) for device in devices] 
+             for devices in data]
+    t=np.array([[scan.time for scan in scans] 
+                for scans in t_scans])/3600
+    char=np.array([[scan.__dict__[dev_char] for scan in scans] 
+                        for scans in t_scans])
+    if not norm:
+        plt.figure(f'soaking_{dev_char} vs. time')
+        plt.ylabel(f'{dev_char}')
+    else:
+        char=char/char.max(0)
+        plt.figure(f'normalized_soaking_{dev_char} vs. time')
+        plt.ylabel(f'normalized {dev_char}')
     plt.plot(t,char)
     plt.legend(names)
-    plt.xlabel('Time (s)')
-    plt.ylabel(f'{dev_char}')
-
-def find_best_pixel(device:jvm.light_PVdevice, dev_char:str='PCE')\
-    ->jvm.light_PVdevice:
-    '''
-    Find the best pixel based on the dev_char.
-
-    Parameters
-    ----------
-    device : light_PVdevice
-        light_device object
-    dev_char : str, optional
-        comparison criterion. One device characters among Voc, Jsc, FF,PCE.
-        The default is 'PCE':str.
-
-    Returns : light_PV
-    -------
-    light_PV
-        The best pixel among the device.
-        
-    '''
-    PCE=[character[dev_char] for character in device.characters.values()]
-    i=PCE.index(max(PCE))
-    return device.pixels[i]
+    plt.xlabel('Time (hr)')
+    
 
 # class MDPVT:
 #     def __init__(self,keith,swbox,labels=''):
@@ -146,7 +167,7 @@ def multi_scan(keith,swbox,devices_n,tot_pixel_n,start_v,stop_v,v_step,nplc,p_ar
         
     devices=[]
     for device_n,label in zip(devices_n,labels):
-        pixels=[]
+        scans=[]
         for pixel in range(1,1+tot_pixel_n):
             swbox.switch(device_n,pixel,on=1)
             t=time.perf_counter()
@@ -160,15 +181,15 @@ def multi_scan(keith,swbox,devices_n,tot_pixel_n,start_v,stop_v,v_step,nplc,p_ar
             for v,j in zip(v_list,j_list):
                 p_dir='forward' if v[0]-v[1]<0 else 'reverse'
                 if light:
-                    pixels.append(jvm.light_PV(v,j,f'{label}_p{pixel}_{p_dir}'
+                    scans.append(jvm.light_PV(v,j,f'{label}_p{pixel}_{p_dir}'
                                                ,p_area,power_in,time=t_soak))
                 else:
-                    pixels.append(jvm.dark_PV(v,j,f'{label}_p{pixel}_{p_dir}'
+                    scans.append(jvm.dark_PV(v,j,f'{label}_p{pixel}_{p_dir}'
                                               ,p_area))
         if light:
-            device=jvm.light_PVdevice(pixels,label,direction,p_area,power_in)
+            device=jvm.light_PVdevice(scans,label,direction,p_area,power_in)
         else:
-            device=jvm.dark_PVdevice(pixels,label,direction,p_area)
+            device=jvm.dark_PVdevice(scans,label,direction,p_area)
         devices.append(device)
         device.save_all(location)
     if plot:
@@ -196,15 +217,15 @@ class soak_thread(threading.Thread):
         counter=0
         names=[location+f'/{i}_soaking_summary.csv' for i in self.labels]
         scan_n=tot_pixel_n*2 if self.kwargs['hys'] else tot_pixel_n
-        make_soak_summary_header(names, scan_n)
+        make_soak_summary_header(names, scan_n, self.kwargs['hys'])
         self.data=[]
         while not stopEvent.is_set():
             print(f'Number {counter} run.')
             self.data.append(soak_thread.func(**self.kwargs))
-            save_soak_summary(names, self.data[-1])
+            save_soak_summary(names, self.data[-1], self.kwargs['hys'])
             for device,device_0 in zip(self.data[-1],self.data[0]):
-                pix=find_best_pixel(device)
-                pix_0=find_best_pixel(device_0)
+                pix=device.find_best_scan()
+                pix_0=device_0.find_best_scan()
                 try:
                     d_PCE=(pix.PCE-pix_0.PCE)/pix_0.PCE*100
                 except:
@@ -219,7 +240,7 @@ class soak_thread(threading.Thread):
 if __name__=='__main__':
     
     light=True
-    hys=True
+    hys=False
     start_v = 0.5
     stop_v = -0.4
     v_step = -0.2
@@ -251,8 +272,8 @@ if __name__=='__main__':
     
     #%% measure
     start_t=time.perf_counter()
-    soaking_thread=soak_thread(stopEvent,keith,swbox,devices_n,tot_pixel_n,start_v,stop_v,v_step,nplc,p_area,
-            start_t,light,power_in,hys,labels,soak_delay=soak_delay)
-    soaking_thread.start()
-    # devices=multi_scan(keith,swbox,devices_n,tot_pixel_n,start_v,stop_v,v_step,nplc,p_area,
-    #         light=light,power_in=power_in,hys=hys,labels=labels,plot=True)
+    # soaking_thread=soak_thread(stopEvent,keith,swbox,devices_n,tot_pixel_n,start_v,stop_v,v_step,nplc,p_area,
+    #         start_t,light,power_in,hys,labels,soak_delay=soak_delay)
+    # soaking_thread.start()
+    devices=multi_scan(keith,swbox,devices_n,tot_pixel_n,start_v,stop_v,v_step,nplc,p_area,
+            light=light,power_in=power_in,hys=hys,labels=labels,plot=True)
